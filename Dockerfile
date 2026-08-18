@@ -1,16 +1,28 @@
-FROM node:20-alpine AS builder
+FROM node:20-alpine AS base
+
+FROM base AS deps
 WORKDIR /app
 COPY package*.json ./
 RUN npm ci
+
+FROM base AS builder
+WORKDIR /app
+COPY --from=deps /app/node_modules ./node_modules
 COPY . .
+
+ARG NEXT_PUBLIC_API_BASE_URL
+ENV NEXT_PUBLIC_API_BASE_URL=$NEXT_PUBLIC_API_BASE_URL
+
 RUN npm run build
 
-FROM node:20-alpine
+FROM base AS runner
 WORKDIR /app
-COPY --from=builder /app/package*.json ./
-COPY --from=builder /app/.next ./.next
+ENV NODE_ENV=production
+
 COPY --from=builder /app/public ./public
-COPY --from=builder /app/node_modules ./node_modules
+COPY --from=builder /app/.next/standalone ./
+COPY --from=builder /app/.next/static ./.next/static
 
 EXPOSE 3000
-CMD ["npm", "start"]
+ENV PORT=3000
+CMD ["node", "server.js"]
